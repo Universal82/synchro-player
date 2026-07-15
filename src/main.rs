@@ -8,6 +8,7 @@ use iced_video_player::{Video, VideoPlayer};
 
 use std::io::IoSlice;
 use std::ops::Not;
+use std::time::Duration;
 use std::{default::Default, path::PathBuf};
 
 use log::{debug, info, warn, error};
@@ -19,14 +20,23 @@ enum PlayState {
 
 #[derive(Debug, Clone, Copy)]
 enum Message {
-    Pause(Option<iced_video_player::Position>),
-    Play(Option<iced_video_player::Position>),
+    Pause(iced_video_player::Position),
+    Play(iced_video_player::Position),
     SkipTo(iced_video_player::Position),
-    SkipBy(iced_video_player::Position),
+    SkipForwardBy(Duration),
+    SkipBackwardBy(Duration),
     ToggleLoop,
     TogglePlay,
 
     WindowResize(iced::Size),
+}
+
+mod helpers {
+    use std::time::Duration;
+
+    // fn position_as_frame(time: Duration, framerate: f64) -> u32 {
+    //     (time*framerate). as u32
+    // }
 }
 
 struct App {
@@ -71,6 +81,8 @@ impl App {
                         _ => None
                     },
                     iced::keyboard::Key::Named(iced::keyboard::key::Named::Space) => Some(Message::TogglePlay),
+                    iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowLeft) => Some(Message::SkipBackwardBy(Duration::from_secs(5))),
+                    iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowRight) => Some(Message::SkipForwardBy(Duration::from_secs(5))),
                     _ => None
                 },
                 _ => None
@@ -82,21 +94,44 @@ impl App {
         info!("Update with message {message:?}");
         use Message::*;
         match message {
-            Pause(Some(t)) => {
+            Pause(iced_video_player::Position::Frame(frame)) => {
+                self.video.set_paused(true);
+                if let Err(_) = self.video.seek(iced_video_player::Position::Frame(frame), true) {
+                    error!("Could not seek to frame {frame}")
+                }
             },
-            Pause(None) => {},
 
-            Play(Some(t)) => {},
-            Play(None) => {},
+            Play(iced_video_player::Position::Frame(frame)) => {
+                self.video.set_paused(false);
+                if let Err(_) = self.video.seek(iced_video_player::Position::Frame(frame), true) {
+                    error!("Could not seek to frame {frame}")
+                }
+            },
 
-            SkipTo(t) => {},
+            SkipTo(iced_video_player::Position::Frame(frame)) => {
+                if let Err(_) = self.video.seek(iced_video_player::Position::Frame(frame), true) {
+                    error!("Could not seek to frame {frame}")
+                }
+            },
 
-            SkipBy(a) => {},
+            SkipForwardBy(dur) => {
+                if let Err(_) = self.video.seek(self.video.position()+dur, true) {
+                    error!("Could not seek forward by {dur:?}")
+                }
+            },
+
+            SkipBackwardBy(dur) => {
+                if let Err(_) = self.video.seek(self.video.position()-dur, true) {
+                    error!("Could not seek backward by {dur:?}")
+                }
+            },
 
             ToggleLoop => self.video.set_looping(self.video.looping().not()),
             TogglePlay => self.video.set_paused(self.video.paused().not()),
 
             WindowResize(s) => self.window_size = s,
+
+            _ => {}
         }
     }
 
