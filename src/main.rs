@@ -47,6 +47,7 @@ enum Message {
 struct App {
     window_size: iced::Size,
     video: Video,
+    server: Option<std::net::Ipv4Addr>,
 }
 
 impl Default for App {
@@ -56,7 +57,8 @@ impl Default for App {
                 &url::Url::from_file_path(
                             std::env::args().skip(1).collect::<Vec<String>>()[0].as_str()
                         ).unwrap()
-            ).unwrap()
+            ).unwrap(),
+            server: None
         }
     }
 }
@@ -105,53 +107,57 @@ impl App {
         info!("Update with message {message:?}");
         use Message::*;
         match message {
-            Pause(iced_video_player::Position::Frame(frame)) => {
+            SkipTo(pos) => {
+                // This is where the bulk of the networking stuff will happen so I have to do less boilerplate code on the other messages
+                if let Err(_) = self.video.seek(pos, true) {
+                    error!("Could not seek to frame {pos:?}")
+                }
+            },
+
+            Pause(pos) => {
                 self.video.set_paused(true);
-                if let Err(_) = self.video.seek(iced_video_player::Position::Frame(frame), true) {
-                    error!("Could not seek to frame {frame}")
+                if let Err(_) = self.video.seek(pos, true) {
+                    error!("Could not seek to {pos:?}")
                 }
             },
 
-            Play(iced_video_player::Position::Frame(frame)) => {
+            Play(pos) => {
                 self.video.set_paused(false);
-                if let Err(_) = self.video.seek(iced_video_player::Position::Frame(frame), true) {
-                    error!("Could not seek to frame {frame}")
-                }
-            },
-
-            SkipTo(iced_video_player::Position::Frame(frame)) => {
-                if let Err(_) = self.video.seek(iced_video_player::Position::Frame(frame), true) {
-                    error!("Could not seek to frame {frame}")
+                if let Err(_) = self.video.seek(pos, true) {
+                    error!("Could not seek to {pos:?}")
                 }
             },
 
             SkipForwardBy(Position::Time(dur)) => {
-                if let Err(_) = self.video.seek(self.video.position()+dur, true) {
-                    error!("Could not seek forward by {dur:?}s")
-                }
+                // Hook into Message::SkipTo 
+                self.update(Message::SkipTo(Position::Time(self.video.position()+dur)));
             },
 
             SkipBackwardBy(Position::Time(dur)) => {
-                if let Err(_) = self.video.seek(helpers::safe_duration_sub(self.video.position(), dur), true) {
-                    error!("Could not seek backward by {dur:?}s")
-                }
+                // Hook into Message::SkipTo 
+                self.update(Message::SkipTo(Position::Time(helpers::safe_duration_sub(self.video.position(), dur))));
             },
 
             SkipForwardBy(Position::Frame(f)) => {
-                if let Err(_) = self.video.seek(self.video.position() + Duration::from_millis((1000.0/self.video.framerate()) as u64), true) {
-                    error!("Could not seek forward by {f} frame")
-                }
+                // Hook into Message::SkipTo 
+                self.update(Message::SkipTo(Position::Time(self.video.position() + Duration::from_millis(f * (1000.0/self.video.framerate()) as u64))));
             },
 
             SkipBackwardBy(Position::Frame(f)) => {
-                if let Err(_) = self.video.seek(helpers::safe_duration_sub(self.video.position(), Duration::from_millis((1000.0/self.video.framerate()) as u64)), true) {
-                    error!("Could not seek backward by {f} frame")
-                }
+                // Hook into Message::SkipTo 
+                self.update(Message::SkipTo(Position::Time(helpers::safe_duration_sub(self.video.position(), Duration::from_millis(f * (1000.0/self.video.framerate()) as u64)))));
             },
 
+            TogglePlay => {
+                // Hook into Message::Pause and Message::Play
+                match self.video.paused() {
+                    true => self.update(Message::Play(Position::Time(self.video.position()))),
+                    false => self.update(Message::Pause(Position::Time(self.video.position()))),
+                }
+            },
+            
+            // Not intended to be networked
             ToggleLoop => self.video.set_looping(self.video.looping().not()),
-            TogglePlay => self.video.set_paused(self.video.paused().not()),
-
             WindowResize(s) => self.window_size = s,
 
             _ => {}
@@ -160,12 +166,16 @@ impl App {
 
     fn view(&self) -> Element<'_, Message> {
         info!("View tick!");
+        let overlay = column![
+            "I am overlay text!"
+        ].width(Fill).height(Fill);
         stack![
             container(
                 VideoPlayer::new(&self.video)
                     .width(Fill)
                     .height(Fill)
             ).width(Fill).height(Fill),
+            container(overlay).width(Fill).height(Fill)
         ].width(Fill).height(Fill).into()
     }
 }
