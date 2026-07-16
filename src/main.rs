@@ -36,7 +36,7 @@ fn FormatTimestamp(t: u64) -> String {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum Message {
     Pause(iced_video_player::Position),
     Play(iced_video_player::Position),
@@ -135,7 +135,9 @@ impl App {
     }
 
     fn update(&mut self, message: Message) {
-        info!("Update with message {message:?}");
+        if message != Message::Tick {
+            info!("Update with message {message:?}");
+        }
         use Message::*;
         match message {
             SkipTo(pos) => {
@@ -207,7 +209,6 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        info!("View tick!");
         let controls = column![
             container(
                 container(Space::new())
