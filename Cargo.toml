@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 env_logger = "0.11.11"
-iced = "0.14.0"
+iced = { version = "0.14.0", features = ["svg"] }
 iced_video_player = "0.6.0"
 log = "0.4.33"
 url = "2.5.8"
