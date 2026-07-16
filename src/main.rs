@@ -1,20 +1,18 @@
 mod style;
 
-use iced::Length::{Fill, Shrink};
-use iced::advanced::graphics::futures::backend::default;
-use iced::advanced::graphics::text::cosmic_text::skrifa::raw::collections::IntSet;
-use iced::futures::stream::Skip;
-use iced::widget::text::Format;
-use iced::widget::{Space, button, column, container, image, mouse_area, row, stack, svg, text};
-use iced::{Alignment, Color, Element, Event, Size, Subscription, alignment, event, time, window};
+use iced::Length::Fill;
+use iced::widget::{Space, button, column, container, mouse_area, row, stack, svg, text};
+use iced::{Element, Size, Subscription, alignment, event, window};
 use iced_video_player::{Position, Video, VideoPlayer};
-use std::io::IoSlice;
 use std::ops::Not;
-use std::str::FromStr;
 use std::time::Duration;
-use std::{default::Default, path::PathBuf};
-
-use log::{debug, error, info, warn};
+use std::{default::Default};
+use log::{
+    //debug,
+    error,
+    info,
+    //warn
+};
 
 mod helpers {
     use std::time::Duration;
@@ -28,7 +26,7 @@ mod helpers {
     }
 }
 
-fn FormatTimestamp(t: u64) -> String {
+fn format_timestamp(t: u64) -> String {
     if t < 60 * 60 {
         format!("{:0>2}:{:0>2}", (t / 60) % 60, t % 60)
     } else {
@@ -101,7 +99,7 @@ impl App {
 
     fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
-            event::listen_with(|event, status, window| {
+            event::listen_with(|event, _status, _window| {
                 // This is a nightmare to work with, ngl
                 match event {
                     iced::event::Event::Window(iced::window::Event::Resized(size)) => {
@@ -254,8 +252,8 @@ impl App {
                     .on_press(Message::SkipForwardBy(Position::Time(Duration::from_secs(5)))),
                     text(format!(
                         "{} / {}",
-                        FormatTimestamp(self.video.position().as_secs()),
-                        FormatTimestamp(self.video.duration().as_secs())
+                        format_timestamp(self.video.position().as_secs()),
+                        format_timestamp(self.video.duration().as_secs())
                     )),
                     container(
                         button(
