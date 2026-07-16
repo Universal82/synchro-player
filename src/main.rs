@@ -1,9 +1,9 @@
-use iced::Length::Fill;
+use iced::Length::{Fill, Shrink};
 use iced::advanced::graphics::text::cosmic_text::skrifa::raw::collections::IntSet;
 use iced::futures::stream::Skip;
-use iced::widget::{container, stack};
+use iced::widget::{container, stack, text};
 use iced::{advanced::graphics::futures::backend::default, widget::column};
-use iced::{Element, Event, Size, Subscription, event, window};
+use iced::{Alignment, Element, Event, Size, Subscription, alignment, event, window};
 use iced_video_player::{Position, Video, VideoPlayer};
 
 use std::io::IoSlice;
@@ -24,11 +24,6 @@ mod helpers {
             return d1 - d2;
         }
     }
-}
-
-enum PlayState {
-    Pause,
-    Play
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -167,15 +162,15 @@ impl App {
     fn view(&self) -> Element<'_, Message> {
         info!("View tick!");
         let overlay = column![
-            "I am overlay text!"
-        ].width(Fill).height(Fill);
+            text("I am overlay text!").align_y(iced::alignment::Vertical::Bottom).align_x(iced::alignment::Horizontal::Center)
+        ].width(Fill).height(Shrink).align_x(alignment::Horizontal::Center);
         stack![
             container(
                 VideoPlayer::new(&self.video)
                     .width(Fill)
                     .height(Fill)
             ).width(Fill).height(Fill),
-            container(overlay).width(Fill).height(Fill)
+            container(overlay).width(Fill).height(Fill).align_y(alignment::Vertical::Bottom).align_x(alignment::Horizontal::Center)
         ].width(Fill).height(Fill).into()
     }
 }
