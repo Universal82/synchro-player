@@ -4,10 +4,10 @@ use iced::Length::{Fill, Shrink};
 use iced::advanced::graphics::futures::backend::default;
 use iced::advanced::graphics::text::cosmic_text::skrifa::raw::collections::IntSet;
 use iced::futures::stream::Skip;
+use iced::widget::text::Format;
 use iced::widget::{Space, button, column, container, image, mouse_area, row, stack, svg, text};
-use iced::{Alignment, Element, Event, Size, Subscription, alignment, event, window};
+use iced::{Alignment, Color, Element, Event, Size, Subscription, alignment, event, time, window};
 use iced_video_player::{Position, Video, VideoPlayer};
-
 use std::io::IoSlice;
 use std::ops::Not;
 use std::str::FromStr;
@@ -28,6 +28,14 @@ mod helpers {
     }
 }
 
+fn FormatTimestamp(t: u64) -> String {
+    if t < 60 * 60 {
+        format!("{:0>2}:{:0>2}", (t / 60) % 60, t % 60)
+    } else {
+        format!("{}:{:0>2}:{:0>2}", t / 3600, (t / 60) % 60, t % 60)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Message {
     Pause(iced_video_player::Position),
@@ -37,7 +45,7 @@ enum Message {
     SkipBackwardBy(iced_video_player::Position),
     ToggleLoop,
     TogglePlay,
-
+    Tick,
     WindowResize(iced::Size),
 }
 
@@ -92,18 +100,20 @@ impl App {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        event::listen_with(|event, status, window| {
-            // This is a nightmare to work with, ngl
-            match event {
-                iced::event::Event::Window(iced::window::Event::Resized(size)) => {
-                    Some(Message::WindowResize(size))
-                }
-                iced::event::Event::Keyboard(iced::keyboard::Event::KeyPressed { key, .. }) => {
-                    match key {
+        Subscription::batch([
+            event::listen_with(|event, status, window| {
+                // This is a nightmare to work with, ngl
+                match event {
+                    iced::event::Event::Window(iced::window::Event::Resized(size)) => {
+                        Some(Message::WindowResize(size))
+                    }
+                    iced::event::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+                        key, ..
+                    }) => match key {
                         iced::keyboard::key::Key::Character(c) => match c.as_str() {
                             "l" => Some(Message::ToggleLoop),
-                            "," => Some(Message::SkipBackwardBy(Position::Frame(1))), // watching the "<" key, but it needs to be checking the "," for programming reasons
-                            "." => Some(Message::SkipForwardBy(Position::Frame(1))), // watching the ">" key, but it needs to be checking the "." for programming reasons
+                            "," => Some(Message::SkipBackwardBy(Position::Frame(1))),
+                            "." => Some(Message::SkipForwardBy(Position::Frame(1))),
                             _ => None,
                         },
                         iced::keyboard::Key::Named(iced::keyboard::key::Named::Space) => {
@@ -115,14 +125,13 @@ impl App {
                         iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowRight) => Some(
                             Message::SkipForwardBy(Position::Time(Duration::from_secs(5))),
                         ),
-                        // iced::keyboard::Key::Named(iced::keyboard::key::Named::) => Some(Message::SkipBackwardBy(Position::Time(Duration::from_secs(5)))),
-                        // iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowRight) => Some(Message::SkipForwardBy(Position::Time(Duration::from_secs(5)))),
                         _ => None,
-                    }
+                    },
+                    _ => None,
                 }
-                _ => None,
-            }
-        })
+            }),
+            iced::time::every(Duration::from_millis(50)).map(|_| Message::Tick),
+        ])
     }
 
     fn update(&mut self, message: Message) {
@@ -199,16 +208,30 @@ impl App {
 
     fn view(&self) -> Element<'_, Message> {
         info!("View tick!");
-
         let controls = column![
-            container(Space::new())
-                .width(Fill)
-                .height(4)
-                .style(style::seekbar),
+            container(
+                container(Space::new())
+                    .style(style::seekbar_progress)
+                    .height(Fill)
+                    .width(
+                        self.window_size.width
+                            * (self.video.position().as_millis() as f32
+                                / self.video.duration().as_millis() as f32)
+                    )
+            )
+            .width(Fill)
+            .height(4)
+            .style(style::seekbar),
             container(
                 row![
-                    button(svg("src/assets/skip-previous.svg").height(30).width(30))
-                        .style(style::media_button),
+                    button(
+                        svg("src/assets/replay-5.svg")
+                            .height(30)
+                            .width(30)
+                            .style(style::media_button_icon)
+                    )
+                    .style(style::media_button)
+                    .on_press(Message::SkipBackwardBy(Position::Time(Duration::from_secs(5)))),
                     button(
                         svg(match self.video_paused {
                             true => "src/assets/play.svg",
@@ -216,10 +239,37 @@ impl App {
                         })
                         .width(30)
                         .height(30)
+                        .style(style::media_button_icon)
                     )
+                    .on_press(Message::TogglePlay)
                     .style(style::media_button),
-                    button(svg("src/assets/skip-next.svg").width(30).height(30))
+                    button(
+                        svg("src/assets/forward-5.svg")
+                            .width(30)
+                            .height(30)
+                            .style(style::media_button_icon)
+                    )
+                    .style(style::media_button)
+                    .on_press(Message::SkipForwardBy(Position::Time(Duration::from_secs(5)))),
+                    text(format!(
+                        "{} / {}",
+                        FormatTimestamp(self.video.position().as_secs()),
+                        FormatTimestamp(self.video.duration().as_secs())
+                    )),
+                    container(
+                        button(
+                            if self.video.looping() {
+                                svg("src/assets/repeat-on.svg").style(style::media_button_icon)
+                            } else {
+                                svg("src/assets/repeat.svg").style(style::media_button_icon_inactive)
+                            }
+                            .width(30)
+                            .height(30)
+                        )
                         .style(style::media_button)
+                        .on_press(Message::ToggleLoop)
+                    )
+                    .align_right(Fill)
                 ]
                 .padding([0, 10])
                 .align_y(alignment::Vertical::Center)
@@ -231,6 +281,10 @@ impl App {
         ];
 
         stack![
+            container(Space::new())
+                .width(Fill)
+                .height(Fill)
+                .style(style::background),
             container(
                 mouse_area(
                     VideoPlayer::new(&self.video)
@@ -241,9 +295,9 @@ impl App {
                 .on_press(Message::TogglePlay)
             )
             .align_x(alignment::Horizontal::Center)
-            .align_y(alignment::Vertical::Center)
+            .align_y(alignment::Vertical::Top)
             .width(Fill)
-            .height(Fill),
+            .height(self.window_size.height - 50.0),
             container(controls)
                 .width(Fill)
                 .height(Fill)
@@ -264,5 +318,5 @@ fn main() {
         .init();
 
     info!("Logging initialized! Hello, world!");
-    App::run(Size::new(500.0, 500.0));
+    App::run(Size::new(1000.0, 563.0));
 }
